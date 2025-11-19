@@ -6,6 +6,8 @@ A Streamlit app that generates and displays random 3x3 Rubik's cube configuratio
 import streamlit as st
 import random
 import json
+import plotly.graph_objects as go
+import numpy as np
 
 # Standard Rubik's cube colors
 COLORS = {
@@ -144,6 +146,97 @@ def render_face(face_data, face_name):
     html += "</div></div>"
     return html
 
+def create_3d_cube(cube_state):
+    """Create a 3D visualization of the Rubik's cube using Plotly"""
+    fig = go.Figure()
+    
+    # Define the 6 faces and their positions/orientations
+    # Each face is a 3x3 grid of small cubes (stickers)
+    sticker_size = 0.95  # Size of each sticker relative to cube unit
+    gap = 0.05  # Gap between stickers
+    
+    faces_config = {
+        'F': {'normal': [0, 0, 1], 'offset': [0, 0, 1.5], 'right': [1, 0, 0], 'up': [0, 1, 0]},  # Front (Red)
+        'B': {'normal': [0, 0, -1], 'offset': [0, 0, -1.5], 'right': [-1, 0, 0], 'up': [0, 1, 0]},  # Back (Orange)
+        'U': {'normal': [0, 1, 0], 'offset': [0, 1.5, 0], 'right': [1, 0, 0], 'up': [0, 0, -1]},  # Up (White)
+        'D': {'normal': [0, -1, 0], 'offset': [0, -1.5, 0], 'right': [1, 0, 0], 'up': [0, 0, 1]},  # Down (Yellow)
+        'R': {'normal': [1, 0, 0], 'offset': [1.5, 0, 0], 'right': [0, 0, -1], 'up': [0, 1, 0]},  # Right (Blue)
+        'L': {'normal': [-1, 0, 0], 'offset': [-1.5, 0, 0], 'right': [0, 0, 1], 'up': [0, 1, 0]},  # Left (Green)
+    }
+    
+    for face_name, config in faces_config.items():
+        face_data = cube_state[face_name]
+        normal = np.array(config['normal'])
+        offset = np.array(config['offset'])
+        right = np.array(config['right'])
+        up = np.array(config['up'])
+        
+        # Draw each sticker on this face
+        for row in range(3):
+            for col in range(3):
+                color_code = face_data[row][col]
+                color = COLORS[color_code]
+                
+                # Calculate center position of this sticker
+                center = offset + right * (col - 1) + up * (1 - row)
+                
+                # Create a small square for this sticker
+                half_size = sticker_size / 2
+                corners = [
+                    center + right * half_size + up * half_size,
+                    center - right * half_size + up * half_size,
+                    center - right * half_size - up * half_size,
+                    center + right * half_size - up * half_size,
+                ]
+                
+                # Create mesh for this sticker
+                x = [c[0] for c in corners] + [corners[0][0]]
+                y = [c[1] for c in corners] + [corners[0][1]]
+                z = [c[2] for c in corners] + [corners[0][2]]
+                
+                fig.add_trace(go.Scatter3d(
+                    x=x, y=y, z=z,
+                    mode='lines',
+                    line=dict(color='black', width=3),
+                    showlegend=False,
+                    hoverinfo='skip'
+                ))
+                
+                # Fill the sticker with color using Mesh3d
+                fig.add_trace(go.Mesh3d(
+                    x=[c[0] for c in corners],
+                    y=[c[1] for c in corners],
+                    z=[c[2] for c in corners],
+                    i=[0, 0],
+                    j=[1, 2],
+                    k=[2, 3],
+                    color=color,
+                    opacity=1.0,
+                    showlegend=False,
+                    hoverinfo='skip',
+                    flatshading=True
+                ))
+    
+    # Update layout for better 3D view
+    fig.update_layout(
+        scene=dict(
+            xaxis=dict(visible=False, range=[-2, 2]),
+            yaxis=dict(visible=False, range=[-2, 2]),
+            zaxis=dict(visible=False, range=[-2, 2]),
+            aspectmode='cube',
+            camera=dict(
+                eye=dict(x=1.5, y=1.5, z=1.5),
+                center=dict(x=0, y=0, z=0)
+            ),
+            bgcolor='rgba(240,240,240,0.9)'
+        ),
+        margin=dict(l=0, r=0, t=0, b=0),
+        height=500,
+        showlegend=False
+    )
+    
+    return fig
+
 def main():
     """Main Streamlit app"""
     st.set_page_config(page_title="Rubik's Cube Generator", layout="wide")
@@ -162,27 +255,28 @@ def main():
             st.session_state.cube = generate_random_cube()
             st.rerun()
     
-    # Display cube in 2x3 grid layout
+    # Display cube in 2 columns: 2D unfolded view and 3D view
     st.subheader("Cube Visualization")
-    st.write("Standard unfolded cube layout:")
     
     # Create 2 columns for the layout
-    left_col, right_col = st.columns(2)
+    left_col, right_col = st.columns([1, 1])
     
     with left_col:
+        st.write("**2D Unfolded Layout:**")
         # Row 1: Back, Up
         st.markdown(render_face(st.session_state.cube['B'], FACE_NAMES['B']), unsafe_allow_html=True)
         st.markdown(render_face(st.session_state.cube['U'], FACE_NAMES['U']), unsafe_allow_html=True)
         # Row 2: Left, Front
         st.markdown(render_face(st.session_state.cube['L'], FACE_NAMES['L']), unsafe_allow_html=True)
         st.markdown(render_face(st.session_state.cube['F'], FACE_NAMES['F']), unsafe_allow_html=True)
+        # Row 3: Right, Down
+        st.markdown(render_face(st.session_state.cube['R'], FACE_NAMES['R']), unsafe_allow_html=True)
+        st.markdown(render_face(st.session_state.cube['D'], FACE_NAMES['D']), unsafe_allow_html=True)
     
     with right_col:
-        # Row 2: Right (aligned with Front)
-        st.markdown("<div style='height: 130px;'></div>", unsafe_allow_html=True)  # Spacer
-        st.markdown(render_face(st.session_state.cube['R'], FACE_NAMES['R']), unsafe_allow_html=True)
-        # Row 3: Down
-        st.markdown(render_face(st.session_state.cube['D'], FACE_NAMES['D']), unsafe_allow_html=True)
+        st.write("**3D Interactive View:**")
+        fig = create_3d_cube(st.session_state.cube)
+        st.plotly_chart(fig, use_container_width=True)
     
     st.divider()
     
